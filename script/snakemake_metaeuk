@@ -1,0 +1,72 @@
+####Dry RUN command :
+#nohup snakemake -j 200 -s snakemake_metaeuk -n --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --constraint='haswell|broadwell|skylake' --exclude=pbil-deb27 " &> nohup_snakemake_metaeuk.out &
+####Unlock command :
+#nohup snakemake -j 200 -s snakemake_metaeuk --unlock --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --constraint='haswell|broadwell|skylake' --exclude=pbil-deb27 "  &> nohup_snakemake_metaeuk.out &
+####Real command :
+#nohup /beegfs/data/soft/bioconda/bin/snakemake -j 200 -s snakemake_metaeuk --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --constraint='haswell|broadwell|skylake' --exclude=pbil-deb27 " &> nohup_snakemake_metaeuk.out &
+
+import re
+import os
+
+#paths
+bin_dir="/beegfs/project/horizon/bin/miniconda3/bin/"
+scripts_dir="/beegfs/data/fblanchard/horizon/scripts/Genes_prediction/"
+logs_dir="/beegfs/data/fblanchard/horizon/logs/"
+genomes_dir="/beegfs/data/aportal/horizon/Genomes/species/"
+db_dir="/beegfs/project/horizon/db/"
+mtk_dir="/beegfs/data/fblanchard/horizon/Metaeuk/"
+
+#species_list
+species_file = open('/beegfs/data/fblanchard/horizon/list_test.txt', 'r') #write the list
+# read the content and split when newline 
+list_species = species_file.read().split('\n') 
+list_species = list_species[:-1] 
+
+rule all:
+        input:
+                expand(mtk_dir+"{species}/{species}_predsResults.gff", species = list_species), #rule predict_mtk
+                expand(mtk_dir+"{species}/{species}_taxResult_per_contig.tsv", species = list_species) #rule mtk_taxtocontig
+
+rule predict_mtk : #returns the genes prediction made with metaeuk
+        params:
+                name="mtk_{species}",
+                out=logs_dir+"mtk_{species}.out",
+                err=logs_dir+"mtk_{species}.error",
+                partition="normal",
+                threads="4",
+                time="40:00:00",
+                mem="80G"
+        input:
+                species_fa=genomes_dir+"{species}.fa"
+        output:
+                mtk_predict=mtk_dir+"{species}/{species}_predsResults.gff"
+        shell:
+                """
+                mkdir -p {mtk_dir}{wildcards.species}/
+                {bin_dir}metaeuk easy-predict {input.species_fa} {db_dir}UniRef/UniRef_insecta90_viruses90_bacteria50.fa {mtk_dir}{wildcards.species}/{wildcards.species}_predsResults {mtk_dir}{wildcards.species}/{wildcards.species}_tempFolder --min-length 33 --compressed 1 --split-memory-limit 65G
+                """
+
+
+rule mtk_taxtocontig : #taxonimic assignment to contig with metaeuk
+        params:
+                name="mtk_{species}_taxtocontig",
+                out=logs_dir+"mtk_{species}_taxtocontig.out",
+                err=logs_dir+"mtk_{species}_taxtocontig.error",
+                partition="normal",
+                threads="4",
+                time="40:00:00",
+                mem="80G"
+        input:
+                species_fa=mtk_dir+"{species}/{species}_predsResults.gff"
+        output:
+                mtk_predict=mtk_dir+"{species}/{species}_taxResult_per_contig.tsv"
+        shell:
+                """
+                {bin_dir}metaeuk taxtocontig {mtk_dir}{wildcards.species}/{wildcards.species}_tempFolder/latest/contigs {mtk_dir}{wildcards.species}/{wildcards.species}_predsResults.fas {mtk_dir}{wildcards.species}/{wildcards.species}_predsResults.headersMap.tsv /beegfs/data/fblanchard/horizon/test_db/UniRef_insecta90_viruses90_bacteria50_with_uniprot_ids_DB {mtk_dir}{wildcards.species}/{wildcards.species}_taxResult {mtk_dir}{wildcards.species}/{wildcards.species}_tempFolder --majority 0.5 --tax-lineage 1 --lca-mode 2
+                rm -r {mtk_dir}{wildcards.species}/{wildcards.species}_tempFolder
+                """
+
+
+
+
+ 
