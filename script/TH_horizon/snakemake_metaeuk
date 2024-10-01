@@ -10,14 +10,14 @@ import os
 
 #paths
 bin_dir="/beegfs/project/horizon/bin/miniconda3/bin/"
-scripts_dir="/beegfs/data/fblanchard/horizon/script/TH_horizon"
+scripts_dir="/beegfs/data/fblanchard/horizon/script/TH_horizon/"
 logs_dir="/beegfs/data/fblanchard/horizon/TH_horizon/logs/"
-genomes_dir="/beegfs/data/aportal/horizon/Genomes/species/"
-db_dir="/beegfs/project/horizon/TH_horizon/db/"
+genomes_dir="/beegfs/data/fblanchard/horizon/TH_horizon/genome/"
+db_dir="/beegfs/project/horizon/db/UniRef/"
 mtk_dir="/beegfs/data/fblanchard/horizon/TH_horizon/data/"
 
 #species_list
-species_file = open('/beegfs/data/fblanchard/horizon/list_test.txt', 'r') #write the list
+species_file = open('/beegfs/data/fblanchard/horizon/TH_horizon/list/list_test.txt', 'r') #write the list
 # read the content and split when newline 
 list_species = species_file.read().split('\n') 
 list_species = list_species[:-1] 
@@ -26,7 +26,13 @@ rule all:
         input:
                 expand(mtk_dir+"{species}/{species}_predsResults.gff", species = list_species), #rule predict_mtk
                 expand(mtk_dir+"{species}/{species}_taxResult_tax_per_contig.tsv", species = list_species), #rule mtk_taxtocontig
-                expand(mtk_dir+"{species}/{species}_predsResults.codon_clean.fas",species = list_species) #rule format_headers
+                expand(mtk_dir+"{species}/{species}_predsResults.codon_clean.fas",species = list_species), #rule format_headers
+                expand(mtk_dir+"{species}/{species}_TE.fa",species = list_species), #rule bed_to_fasta
+                expand(mtk_dir+"{species}/{species}_mtk+TE_cat.fa",species = list_species), #rule cat_and_bed
+                expand(mtk_dir+"{species}/{species}_mtk.bed",species = list_species), #rule cat_and_bed
+                expand(mtk_dir+"{species}/{species}_TE.bed",species = list_species) #rule cat_and_bed
+
+
 
 rule predict_mtk : #returns the genes prediction made with metaeuk
         params:
@@ -45,13 +51,13 @@ rule predict_mtk : #returns the genes prediction made with metaeuk
         shell:
                 """
                 mkdir -p {mtk_dir}{wildcards.species}/
-                {bin_dir}metaeuk easy-predict {input.species_fa} {db_dir}UniRef/UniRef_insecta90_viruses90_bacteria50.fa {mtk_dir}{wildcards.species}/{wildcards.species}_predsResults {mtk_dir}{wildcards.species}/{wildcards.species}_tempFolder --min-length 33 --compressed 1 --split-memory-limit 65G
+                {bin_dir}metaeuk easy-predict {input.species_fa} {db_dir}UniRef_insecta90_viruses90_bacteria50.fa {mtk_dir}{wildcards.species}/{wildcards.species}_predsResults {mtk_dir}{wildcards.species}/{wildcards.species}_tempFolder --min-length 33 --compressed 1 --split-memory-limit 65G
                 """
 
 
 rule mtk_taxtocontig : #taxonimic assignment to contig with metaeuk
         params:
-                name="mtk_{species}_taxtocontig",
+                name="taxtocontig_{species}",
                 out=logs_dir+"{species}/mtk_{species}_taxtocontig.out",
                 err=logs_dir+"{species}/mtk_{species}_taxtocontig.error",
                 partition="normal",
@@ -64,7 +70,7 @@ rule mtk_taxtocontig : #taxonimic assignment to contig with metaeuk
                 mtk_predict=mtk_dir+"{species}/{species}_taxResult_tax_per_contig.tsv"
         shell:
                 """
-                {bin_dir}metaeuk taxtocontig {mtk_dir}{wildcards.species}/{wildcards.species}_tempFolder/[0-9]*/contigs {mtk_dir}{wildcards.species}/{wildcards.species}_predsResults.fas {mtk_dir}{wildcards.species}/{wildcards.species}_predsResults.headersMap.tsv /beegfs/data/fblanchard/horizon/db/UniRef_insecta90_viruses90_bacteria50_clean_DB {mtk_dir}{wildcards.species}/{wildcards.species}_taxResult {mtk_dir}{wildcards.species}/{wildcards.species}_tempFolder --majority 0.5 --tax-lineage 1 --lca-mode 2
+                {bin_dir}metaeuk taxtocontig {mtk_dir}{wildcards.species}/{wildcards.species}_tempFolder/[0-9]*/contigs {mtk_dir}{wildcards.species}/{wildcards.species}_predsResults.fas {mtk_dir}{wildcards.species}/{wildcards.species}_predsResults.headersMap.tsv /beegfs/data/fblanchard/horizon/TH_horizon/db/UniRef_insecta90_viruses90_bacteria50_clean_DB {mtk_dir}{wildcards.species}/{wildcards.species}_taxResult {mtk_dir}{wildcards.species}/{wildcards.species}_tempFolder --majority 0.5 --tax-lineage 1 --lca-mode 2
                 rm -r {mtk_dir}{wildcards.species}/{wildcards.species}_tempFolder
                 """
 
@@ -87,7 +93,59 @@ rule format_header:
                 {scripts_dir}format_header.py {input.input_file} {input.order_file} {output.output_file}
                 """
             
+rule bed_to_fasta:
+        params:
+                name="format_headers_{species}",
+                out=logs_dir+"{species}/bed_to_fasta_{species}.out",
+                err=logs_dir+"{species}/bed_to_fasta_{species}.error",
+                partition="normal",
+                threads="1",
+                time="0:05:00",
+                mem="10G"
+        input:
+                input_file=genomes_dir+"{species}.fa",
+                bed_file="/beegfs/data/fblanchard/horizon/TH_horizon/TE/{species}_TE_no_duplicates.bed"
+        output:
+                output_file=mtk_dir+"{species}/{species}_TE.fa"
+        shell:
+                """
+                bedtools getfasta -fi {input.input_file} -bed {input.bed_file} -fo {output.output_file}
+                sed -i 's/>/>species_/g' {output.output_file}
+                sed -i 's/:/_start/g' {output.output_file}
+                sed -i 's/-/_end/g' {output.output_file}
 
+                """
 
-
- 
+rule cat_and_bed:
+        params:
+                name="cat_and_bed_{species}",
+                out=logs_dir+"{species}/cat_and_bed_{species}.out",
+                err=logs_dir+"{species}/cat_and_bed_{species}.error",
+                partition="normal",
+                threads="1",
+                time="0:05:00",
+                mem="10G"
+        input:
+                mtk=mtk_dir+"{species}/{species}_predsResults.codon_clean.fas",
+                TE=mtk_dir+"{species}/{species}_TE.fa"
+        output:
+                cat_output=mtk_dir+"{species}/{species}_mtk+TE_cat.fa",
+                TE_bed=mtk_dir+"{species}/{species}_TE.bed",
+                mtk_bed=mtk_dir+"{species}/{species}_mtk.bed"
+        shell:
+                """
+                cat {input.mtk} {input.TE} > {output.cat_output}
+            
+                # Generate the mtk BED file from the mtk FASTA file
+                awk -F'_species_|_order|_start|_end|_strand' '/^>/ {{
+                        split($2, a, "_");
+                        print a[1]"_"a[2]"_"a[3]"_"a[4], $4, $5, $0
+                }}' {input.mtk} > {output.mtk_bed}
+            
+                # Generate the TE BED file from the TE FASTA file
+                awk -F'_species_|_order|_start|_end|_strand' '/^>/ {{
+                        split($1, a, "_");
+                        print a[2]"_"a[3]"_"a[4], $2, $3, $0
+                }}' {input.TE} > {output.TE_bed}
+                """
+            
