@@ -3,7 +3,7 @@
 ####Unlock command :
 #nohup snakemake -j 200 -s snakemake_metaeuk --unlock --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --constraint='haswell|broadwell|skylake' --exclude=pbil-deb27 "  &> nohup_snakemake_metaeuk.out &
 ####Real command :
-#nohup /beegfs/data/soft/bioconda/bin/snakemake -j 200 -s snakemake_metaeuk --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --constraint='haswell|broadwell|skylake' --exclude=pbil-deb27 " &> nohup_snakemake_metaeuk.out &
+#nohup snakemake -j 200 -s snakemake_metaeuk --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --constraint='haswell|broadwell|skylake' --exclude=pbil-deb27 " &> nohup_snakemake_metaeuk.out &
 
 import re
 import os
@@ -30,9 +30,10 @@ rule all:
                 expand(mtk_dir+"{species}/{species}_TE.fa",species = list_species), #rule bed_to_fasta
                 expand(mtk_dir+"{species}/{species}_mtk+TE_cat.fa",species = list_species), #rule cat_and_bed
                 expand(mtk_dir+"{species}/{species}_mtk.bed",species = list_species), #rule cat_and_bed
-                expand(mtk_dir+"{species}/{species}_TE.bed",species = list_species) #rule cat_and_bed
-
-
+                expand(mtk_dir+"{species}/{species}_TE.bed",species = list_species), #rule cat_and_bed
+                expand(mtk_dir+"{species}/{species}_intersect_mtk_TE_overlap.gff",species = list_species), #rule intersect
+                expand(mtk_dir+"{species}/{species}_intersect_mtk_TE_nooverlap.gff",species = list_species), #rule intersect      
+                expand(mtk_dir+"{species}/{species}_intersect_TE_mtk_nooverlap.gff",species = list_species) #rule intersect
 
 rule predict_mtk : #returns the genes prediction made with metaeuk
         params:
@@ -139,13 +140,34 @@ rule cat_and_bed:
                 # Generate the mtk BED file from the mtk FASTA file
                 awk -F'_species_|_order|_start|_end|_strand' '/^>/ {{
                         split($2, a, "_");
-                        print a[1]"_"a[2]"_"a[3]"_"a[4], $4, $5, $0
+                        print a[1]"_"a[2]"_"a[3]"_"a[4] "\t" $4 "\t" $5 "\t" $0
                 }}' {input.mtk} > {output.mtk_bed}
             
                 # Generate the TE BED file from the TE FASTA file
                 awk -F'_species_|_order|_start|_end|_strand' '/^>/ {{
                         split($1, a, "_");
-                        print a[2]"_"a[3]"_"a[4], $2, $3, $0
+                        print a[2]"_"a[3]"_"a[4]"_"a[5] "\t" $2 "\t" $3 "\t" $0
                 }}' {input.TE} > {output.TE_bed}
                 """
-            
+rule intersect:
+        params:
+                name="intersect_{species}",
+                out=logs_dir+"intersect1_{species}.out",
+                err=logs_dir+"intersect1_{species}.error",
+                partition="normal",
+                threads="8",
+                time="2:00:00",
+                mem="20G"
+        input:
+                TE_bed=mtk_dir+"{species}/{species}_TE.bed",
+                mtk_bed=mtk_dir+"{species}/{species}_mtk.bed"
+        output:
+                overlap_mtk_TE=mtk_dir+"{species}/{species}_intersect_mtk_TE_overlap.gff",
+                nooverlap_mtk_TE=mtk_dir+"{species}/{species}_intersect_mtk_TE_nooverlap.gff",
+                nooverlap_TE_mtk=mtk_dir+"{species}/{species}_intersect_TE_mtk_nooverlap.gff"
+        shell:
+                """
+                {bin_dir}bedtools intersect -a {input.mtk_bed} -b {input.TE_bed} -wo > {output.overlap_mtk_TE}
+                {bin_dir}bedtools intersect -a {input.mtk_bed} -b {input.TE_bed} -v > {output.nooverlap_mtk_TE}
+                {bin_dir}bedtools intersect -a {input.TE_bed} -b {input.mtk_bed} -v > {output.nooverlap_TE_mtk}
+                """

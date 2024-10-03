@@ -44,7 +44,7 @@ for line in preds_lines:
         order_name = order_dict.get(species_name, 'order')
 
         # Créer le nouvel en-tête
-        new_header = f">{header_id}_species_{scaffold_info}_{strand}_order{order_name}_start{start}_end{end}\n"
+        new_header = f">{header_id}_species_{scaffold_info}_order{order_name}_start{start}_end{end}_strand{strand}\n"
         new_preds_lines.append(new_header)
     else:
         new_preds_lines.append(line)
