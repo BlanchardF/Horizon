@@ -26,24 +26,27 @@ list_species = list_species[:-1]
 
 rule all:
         input:
-                expand(preds_dir+"{species}/{species}_predsResults.gff", species = list_species), #rule predict_mtk
-                expand(preds_dir+"{species}/{species}_taxResult_tax_per_contig.tsv", species = list_species), #rule mtk_taxtocontig
-                expand(preds_dir+"{species}/{species}_predsResults.codon_clean.fas",species = list_species), #rule format_headers
-                expand(preds_dir+"{species}/{species}_TE.fa",species = list_species), #rule bed_to_fasta
-                expand(preds_dir+"{species}/{species}_TE_clean.bed",species = list_species), #rule bed_to_fasta
-                expand(preds_dir+"{species}/{species}_mtk+TE_cat.fa",species = list_species), #rule cat_and_bed
-                expand(preds_dir+"{species}/{species}_mtk.bed",species = list_species), #rule cat_and_bed
-                expand(preds_dir+"{species}/{species}_TE.bed",species = list_species), #rule make_TE_bed
-                expand(preds_dir+"{species}/{species}_TE_bed_tmp.txt",species = list_species), #rule 
-                expand(preds_dir+"{species}/{species}_TE_clean.fa",species = list_species), #rule clean_TE_fa
-                expand(preds_dir+"{species}/{species}_intersect_mtk_TE_overlap.gff",species = list_species), #rule intersect
-                expand(preds_dir+"{species}/{species}_intersect_mtk_TE_nooverlap.gff",species = list_species), #rule intersect      
-                expand(preds_dir+"{species}/{species}_intersect_TE_mtk_nooverlap.gff",species = list_species), #rule intersect           
-                expand(preds_dir+"{species}/{species}_selected_prediction_sort_uniq.gff",species = list_species), #rule choose_predict
-                expand(preds_dir+"{species}/{species}_prediction_mtk+TE.fa",species = list_species) #rule final_fa_file
-
-
-
+                #rule predict_mtk
+                expand(preds_dir+"{species}/{species}_predsResults.gff", species = list_species), 
+                expand(preds_dir+"{species}/{species}_predsResults.codon.fas", species = list_species),
+                #rule mtk_taxtocontig
+                expand(preds_dir+"{species}/{species}_taxResult_tax_per_contig.tsv", species = list_species), 
+                expand(preds_dir+"{species}/{species}_taxResult_tax_per_pred.tsv", species = list_species),
+                #make_mtk_bed_fasta
+                expand(preds_dir+"{species}/{species}_mtk.fa",species = list_species), 
+                expand(preds_dir+"{species}/{species}_mtk.bed",species = list_species),
+                #make_TE_bed_fasta
+                expand(preds_dir+"{species}/{species}_TE.bed",species = list_species), 
+                expand(preds_dir+"{species}/{species}_TE.fa",species = list_species),
+                #rule intersect
+                expand(preds_dir+"{species}/{species}_preds_all.fa",species = list_species), 
+                expand(preds_dir+"{species}/{species}_intersect_mtk_TE_overlap.gff",species = list_species),
+                expand(preds_dir+"{species}/{species}_intersect_mtk_TE_nooverlap.gff",species = list_species),
+                expand(preds_dir+"{species}/{species}_intersect_TE_mtk_nooverlap.gff",species = list_species),  
+                #rule choose_predict
+                expand(preds_dir+"{species}/{species}_preds_final.bed",species = list_species), 
+                expand(preds_dir+"{species}/{species}_preds_final.fa",species = list_species)
+               
 rule predict_mtk : #returns the genes prediction made with metaeuk
         params:
                 name="mtk_{species}",
@@ -77,7 +80,8 @@ rule mtk_taxtocontig : #taxonimic assignment to contig with metaeuk
         input:
                 species_fa=preds_dir+"{species}/{species}_predsResults.gff"
         output:
-                mtk_predict=preds_dir+"{species}/{species}_taxResult_tax_per_contig.tsv"
+                mtk_taxo_contig=preds_dir+"{species}/{species}_taxResult_tax_per_contig.tsv",
+                mtk_taxo_pred=preds_dir+"{species}/{species}_taxResult_tax_per_pred.tsv"
         shell:
                 """
                 {bin_dir}metaeuk taxtocontig {preds_dir}{wildcards.species}/{wildcards.species}_tempFolder/[0-9]*/contigs {preds_dir}{wildcards.species}/{wildcards.species}_predsResults.fas {preds_dir}{wildcards.species}/{wildcards.species}_predsResults.headersMap.tsv {db_dir}UniRef_insecta90_viruses90_bacteria50_clean_DB/UniRef_insecta90_viruses90_bacteria50_clean_DB {preds_dir}{wildcards.species}/{wildcards.species}_taxResult {preds_dir}{wildcards.species}/{wildcards.species}_tempFolder --majority 0.5 --tax-lineage 1 --lca-mode 2
@@ -85,148 +89,53 @@ rule mtk_taxtocontig : #taxonimic assignment to contig with metaeuk
                 """
 
 
-rule format_header:
+rule make_mtk_bed_fasta:
         params:
-                name="format_headers_{species}",
-                out=logs_dir+"format_header/format_headers_{species}.out",
-                err=logs_dir+"format_header/format_headers_{species}.error",
+                name="make_mtk_bed_fasta_{species}",
+                out=logs_dir+"make_mtk_bed_fasta/make_mtk_bed_fasta_{species}.out",
+                err=logs_dir+"make_mtk_bed_fasta/make_mtk_bed_fasta_{species}.error",
                 partition="normal",
                 threads="1",
                 time="0:05:00",
                 mem="10G"
         input:
-                input_file=preds_dir+"{species}/{species}_predsResults.codon.fas",
+                codon_fasta=preds_dir+"{species}/{species}_predsResults.codon.fas",
                 order_file=list_dir+"species_horizon_order.txt"
         output:
-                output_file=preds_dir+"{species}/{species}_predsResults.codon_clean.fas"
+                mtk_fasta=preds_dir+"{species}/{species}_mtk.fa",
+                mtk_bed=preds_dir+"{species}/{species}_mtk.bed"
         shell:
                 """
-                {scripts_dir}format_header.py {input.input_file} {input.order_file} {output.output_file}
+                {scripts_dir}format_header.py {input.codon_fasta} {input.order_file} {output.mtk_fasta}
+
+                # Generate the mtk BED file from the mtk FASTA file
+                awk -F'_species_|_order|_start|_end|_strand' '/^>/ {{
+                        split($2, a, "_");
+                        print a[1]"_"a[2]"_"a[3]"_"a[4] "\t" $4 "\t" $5 "\t" $0
+                }}' {input.codon_fasta} > {output.mtk_bed}
                 """
 
 
-rule make_TE_bed:
+rule make_TE_bed_fasta:
         params:
-                name="make_TE_bed_{species}",
-                out=logs_dir+"make_TE_bed/make_TE_bed{species}.out",
-                err=logs_dir+"make_TE_bed/make_TE_bed{species}.error",
+                name="make_TE_bed_fasta_{species}",
+                out=logs_dir+"make_TE_bed_fasta/make_TE_bed{species}.out",
+                err=logs_dir+"make_TE_bed_fasta/make_TE_bed{species}.error",
                 partition="normal",
                 threads="3",
                 time="0:20:00",
                 mem="20G"
         input:
                 m8=horizon_TE+"{species}/result_mmseqs2.m8",
+                genome=genomes_dir+"{species}.fa"
         output:
-                output=preds_dir+"{species}/{species}_TE.bed"
+                TE_bed=preds_dir+"{species}/{species}_TE.bed",
+                TE_fasta=preds_dir+"{species}/{species}_TE.fa",
         shell:
                 """
-                cut -f1,9,10,4 "{input.m8}" | awk -F'\t' '{{print $1, $3, $4, $2}}' OFS='\t' | awk -v species="{wildcards.species}" 'BEGIN {{OFS="\t"}} {{print species"_"$0}}' | awk 'BEGIN {{OFS="\t"}} {{$4="TE_"$4; print}}' | sed 's/|/_/g' | awk '{{ $4 = $4"_"$1"_order_start"$2"_end"$3"_strand"; print }}' |  awk '{{ if ($2 < $3) print $0, "+"; else print $1, $3, $2, $4, "-", $5 }}' | sed 's/ \+/\t/g' > {output.output}
-                """
-                
-
-rule bed_to_fasta:
-        params:
-                name="bed_to_fasta_{species}",
-                out=logs_dir+"bed_to_fasta/bed_to_fasta_{species}.out",
-                err=logs_dir+"bed_to_fasta/bed_to_fasta_{species}.error",
-                partition="normal",
-                threads="1",
-                time="0:10:00",
-                mem="10G"
-        input:
-                input_file=genomes_dir+"{species}.fa",
-                bed_file=preds_dir+"{species}/{species}_TE.bed"
-        output:
-                output_file=preds_dir+"{species}/{species}_TE.fa",
-                bed_file=preds_dir+"{species}/{species}_TE_clean.bed"
-        shell:
-                """
-                bedtools getfasta -fi {input.input_file} -bed {input.bed_file} -fo {output.output_file} -s
-                sed -i 's/()//g' {output.output_file} # Supprimer les parenthèses
-                sed -i 's/:/-/g' {output.output_file} # Remplacer le ":" par une tabulation
-                awk -v species="{wildcards.species}" 'NR==FNR {{order[$1] = $2; next}} {{gsub("_order", "_order" order[species]); print}}' {list_dir}species_horizon_order.txt {input.bed_file} | awk '{{ $4 = $4 $5; NF--; print }}' | sed 's/ /\\t/g' > {output.bed_file}
-                """
-
-
-rule header_TE_fasta:
-        params:
-                name="header_TE_fasta_{species}",
-                out=logs_dir+"header_TE_fasta/header_TE_fasta_{species}.out",
-                err=logs_dir+"header_TE_fasta/header_TE_fasta_{species}.error",
-                partition="normal",
-                threads="1",
-                time="0:10:00",
-                mem="10G"
-        input:
-                bed_file=preds_dir+"{species}/{species}_TE_clean.bed"
-        output:
-                bed_file_tmp=preds_dir+"{species}/{species}_TE_bed_tmp.txt"
-        shell:
-                """
-                awk -F'\t' 'BEGIN {{OFS="\t"}} {{print $1 "-" $2 "-" $3, $4}}' {input.bed_file} > {output.bed_file_tmp}
-                """
-
-
-rule clean_TE_fa:
-        params:
-                name="clean_TE_fa_{species}",
-                out=logs_dir+"clean_TE_fa/clean_TE_fa_{species}.out",
-                err=logs_dir+"clean_TE_fa/clean_TE_fa_{species}.error",
-                partition="normal",
-                threads="1",
-                time="0:10:00",
-                mem="10G"
-        input:
-                fa=preds_dir+"{species}/{species}_TE.fa",
-                bed=preds_dir+"{species}/{species}_TE_bed_tmp.txt"
-        output:
-                TE_clean=preds_dir+"{species}/{species}_TE_clean.fa"
-        shell:
-                """
-                awk 'BEGIN {{
-                        while ((getline < "{input.bed}") > 0) {{
-                                split($0, arr, "\t")
-                                map[arr[1]] = arr[2]
-                        }}
-                        close("{input.bed}")
-                }}
-                /^>/ {{
-                        header = substr($1, 2)
-                        if (header in map) {{
-                                print ">" map[header]
-                        }} else {{
-                                print $0
-                        }}
-                        next
-                }}
-                {{ print $0 }}
-                ' {input.fa} > {output.TE_clean}
-                """
-        
-rule cat_and_bed:
-        params:
-                name="cat_and_bed_{species}",
-                out=logs_dir+"cat_and_bed/cat_and_bed_{species}.out",
-                err=logs_dir+"cat_and_bed/cat_and_bed_{species}.error",
-                partition="normal",
-                threads="1",
-                time="0:05:00",
-                mem="10G"
-        input:
-                mtk=preds_dir+"{species}/{species}_predsResults.codon_clean.fas",
-                TE=preds_dir+"{species}/{species}_TE_clean.fa"
-        output:
-                cat_output=preds_dir+"{species}/{species}_mtk+TE_cat.fa",
-                mtk_bed=preds_dir+"{species}/{species}_mtk.bed"
-        shell:
-                """
-                cat {input.mtk} {input.TE} > {output.cat_output}
-            
-                # Generate the mtk BED file from the mtk FASTA file
-                awk -F'_species_|_order|_start|_end|_strand' '/^>/ {{
-                        split($2, a, "_");
-                        print a[1]"_"a[2]"_"a[3]"_"a[4] "\t" $4 "\t" $5 "\t" $0
-                }}' {input.mtk} > {output.mtk_bed}
+                awk -F'\t' '{{print $1, $9, $10, $4}}' OFS='\t' {input.m8} | sed 's/|/_/g' | awk -v species="{wildcards.species}" 'BEGIN {{OFS="\t"}} {{print species"_"$1, $2, $3, $4}}' | awk 'BEGIN {{OFS="\t"}} {{$4 = "TE_"$4"_species_"$1"_order_start"$2"_end"$3"_strand"; print}}' | awk '{{ if ($2 < $3) print $1, $2, $3, $4 "+"; else print $1, $3, $2, $4 "-"}}' OFS='\t' > {preds_dir}{wildcards.species}/{wildcards.species}_TE_unordered.bed
+                awk -v species="{wildcards.species}" 'NR==FNR {{order[$1] = $2; next}} {{gsub("_order", "_order" order[species]); print}}' OFS='\t' {list_dir}species_horizon_order.txt {preds_dir}{wildcards.species}/{wildcards.species}_TE_unordered.bed > {output.TE_bed} 
+                bedtools getfasta -fi {input.genome} -bed {output.TE_bed} -fo {output.TE_fasta} -nameOnly
                 """
 
 
@@ -240,14 +149,19 @@ rule intersect:
                 time="2:00:00",
                 mem="20G"
         input:
-                TE_bed=preds_dir+"{species}/{species}_TE_clean.bed",
-                mtk_bed=preds_dir+"{species}/{species}_mtk.bed"
+                mtk_fasta=preds_dir+"{species}/{species}_mtk.fa",
+                TE_fasta=preds_dir+"{species}/{species}_TE.fa",
+                mtk_bed=preds_dir+"{species}/{species}_mtk.bed",
+                TE_bed=preds_dir+"{species}/{species}_TE.bed"
         output:
+                all_preds=preds_dir+"{species}/{species}_preds_all.fa",
                 overlap_mtk_TE=preds_dir+"{species}/{species}_intersect_mtk_TE_overlap.gff",
                 nooverlap_mtk_TE=preds_dir+"{species}/{species}_intersect_mtk_TE_nooverlap.gff",
                 nooverlap_TE_mtk=preds_dir+"{species}/{species}_intersect_TE_mtk_nooverlap.gff"
         shell:
                 """
+                cat {input.mtk_fasta} {input.TE_fasta} > {output.all_preds}
+
                 {bin_dir}bedtools intersect -a {input.mtk_bed} -b {input.TE_bed} -wo > {output.overlap_mtk_TE}
                 {bin_dir}bedtools intersect -a {input.mtk_bed} -b {input.TE_bed} -v > {output.nooverlap_mtk_TE}
                 {bin_dir}bedtools intersect -a {input.TE_bed} -b {input.mtk_bed} -v > {output.nooverlap_TE_mtk}
@@ -266,32 +180,17 @@ rule choose_predict: #choisit les predictions les plus longues
         input:
                 overlap_mtk_TE=preds_dir+"{species}/{species}_intersect_mtk_TE_overlap.gff",
                 nooverlap_mtk_TE=preds_dir+"{species}/{species}_intersect_mtk_TE_nooverlap.gff",
-                nooverlap_TE_mtk=preds_dir+"{species}/{species}_intersect_TE_mtk_nooverlap.gff"
+                nooverlap_TE_mtk=preds_dir+"{species}/{species}_intersect_TE_mtk_nooverlap.gff",
+                genome=genomes_dir+"{species}.fa"
                
         output:
-                predict=preds_dir+"{species}/{species}_selected_prediction_sort_uniq.gff"
+                predict_bed=preds_dir+"{species}/{species}_preds_final.bed",
+                predict_fa=preds_dir+"{species}/{species}_preds_final.fa"
+
         shell:
                 """
                 {scripts_dir}choose_predict.py -i {input.overlap_mtk_TE} -o {preds_dir}{wildcards.species}/{wildcards.species}_selected_overlap.gff
-                cat {preds_dir}{wildcards.species}/{wildcards.species}_selected_overlap.gff {input.nooverlap_mtk_TE} {input.nooverlap_TE_mtk} > {preds_dir}{wildcards.species}/{wildcards.species}_selected_prediction.gff
-                sort {preds_dir}{wildcards.species}/{wildcards.species}_selected_prediction.gff | uniq |  sed 's/TE/>TE/g'> {output.predict}  #EARLY
-                """
-
-rule final_fa_file:
-        params:
-                name="final_fa_file_{species}",
-                out=logs_dir+"final_fa_file/final_fa_file_{species}.out",
-                err=logs_dir+"final_fa_file/final_fa_file_{species}.error",
-                partition="normal",
-                threads="8",
-                time="0:10:00",
-                mem="20G"
-        input:
-                fa=preds_dir+"{species}/{species}_mtk+TE_cat.fa",
-                gff=preds_dir+"{species}/{species}_selected_prediction_sort_uniq.gff"
-        output:
-                fa=preds_dir+"{species}/{species}_prediction_mtk+TE.fa"
-        shell:
-                """
-                {scripts_dir}extract_fasta.py -f {input.fa} -g {input.gff}  -o {output.fa} 
+                cat {preds_dir}{wildcards.species}/{wildcards.species}_selected_overlap.gff {input.nooverlap_mtk_TE} {input.nooverlap_TE_mtk} | sort | uniq > {output.predict_bed}
+                
+                bedtools getfasta -fi {input.genome} -bed {output.predict_bed} -fo {output.predict_fasta} -nameOnly
                 """
