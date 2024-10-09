@@ -1,9 +1,9 @@
 ####Dry RUN command :
-#nohup snakemake -j 200 -s snakemake_metaeuk -n --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_metaeuk.out &
+#nohup snakemake -j 10 -s snakemake_metaeuk -n --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_metaeuk.out &
 ####Unlock command :
-#nohup snakemake -j 200 -s snakemake_metaeuk --unlock --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] "  &> nohup_snakemake_metaeuk.out &
+#nohup snakemake -j 10 -s snakemake_metaeuk --unlock --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] "  &> nohup_snakemake_metaeuk.out &
 ####Real command :
-#nohup snakemake -j 200 -s snakemake_metaeuk --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_metaeuk.out &
+#nohup snakemake -j 10 -s snakemake_metaeuk --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_metaeuk.out &
 
 import re
 import os
@@ -12,14 +12,14 @@ import os
 bin_dir="/beegfs/project/horizon/bin/miniconda3/bin/"
 scripts_dir="/beegfs/data/fblanchard/horizon/script/Genes_prediction/"
 logs_dir="/beegfs/data/fblanchard/horizon/logs/Genes_prediction/"
-genomes_dir="/beegfs/data/fblanchard/horizon/Genome/"
+genomes_dir="/beegfs/data/fblanchard/horizon/genome/"
 db_dir="/beegfs/project/horizon/db/UniRef/"
 preds_dir="/beegfs/data/fblanchard/horizon/Genes_prediction/"
 list_dir="/beegfs/data/fblanchard/horizon/list/"
 horizon_TE="/beegfs/project/horizon/data/TE/"
 
 #species_list
-species_file = open({list_dir}+'list_test.txt', 'r') #write the list
+species_file = open('/beegfs/data/fblanchard/horizon/list/list_test.txt', 'r') #write the list
 # read the content and split when newline 
 list_species = species_file.read().split('\n') 
 list_species = list_species[:-1] 
@@ -41,7 +41,6 @@ rule all:
                 expand(preds_dir+"{species}/{species}_intersect_TE_mtk_nooverlap.gff",species = list_species), #rule intersect           
                 expand(preds_dir+"{species}/{species}_selected_prediction_sort_uniq.gff",species = list_species), #rule choose_predict
                 expand(preds_dir+"{species}/{species}_prediction_mtk+TE.fa",species = list_species) #rule final_fa_file
-
 
 
 
@@ -81,7 +80,7 @@ rule mtk_taxtocontig : #taxonimic assignment to contig with metaeuk
                 mtk_predict=preds_dir+"{species}/{species}_taxResult_tax_per_contig.tsv"
         shell:
                 """
-                {bin_dir}metaeuk taxtocontig {preds_dir}{wildcards.species}/{wildcards.species}_tempFolder/[0-9]*/contigs {preds_dir}{wildcards.species}/{wildcards.species}_predsResults.fas {preds_dir}{wildcards.species}/{wildcards.species}_predsResults.headersMap.tsv /beegfs/data/fblanchard/horizon/TH_horizon/db/UniRef_insecta90_viruses90_bacteria50_clean_DB {preds_dir}{wildcards.species}/{wildcards.species}_taxResult {preds_dir}{wildcards.species}/{wildcards.species}_tempFolder --majority 0.5 --tax-lineage 1 --lca-mode 2
+                {bin_dir}metaeuk taxtocontig {preds_dir}{wildcards.species}/{wildcards.species}_tempFolder/[0-9]*/contigs {preds_dir}{wildcards.species}/{wildcards.species}_predsResults.fas {preds_dir}{wildcards.species}/{wildcards.species}_predsResults.headersMap.tsv {db_dir}UniRef_insecta90_viruses90_bacteria50_clean_DB/UniRef_insecta90_viruses90_bacteria50_clean_DB {preds_dir}{wildcards.species}/{wildcards.species}_taxResult {preds_dir}{wildcards.species}/{wildcards.species}_tempFolder --majority 0.5 --tax-lineage 1 --lca-mode 2
                 rm -r {preds_dir}{wildcards.species}/{wildcards.species}_tempFolder
                 """
 
