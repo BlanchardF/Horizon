@@ -19,7 +19,7 @@ list_dir="/beegfs/data/fblanchard/horizon/list/"
 horizon_TE="/beegfs/project/horizon/data/TE/"
 
 #species_list
-species_file = open('/beegfs/data/fblanchard/horizon/list/list_test.txt', 'r') #write the list
+species_file = open('/beegfs/data/fblanchard/horizon/list/species_horizon_list.txt', 'r') #write the list
 # read the content and split when newline 
 list_species = species_file.read().split('\n') 
 list_species = list_species[:-1] 
@@ -47,57 +47,40 @@ rule all:
                 expand(preds_dir+"{species}/{species}_preds_final.bed",species = list_species), 
                 expand(preds_dir+"{species}/{species}_preds_final.fa",species = list_species)
                
-rule predict_mtk : #returns the genes prediction made with metaeuk
+rule predict_mtk : #returns the genes prediction made with metaeuk and taxonomic assignation 
         params:
                 name="mtk_{species}",
                 out=logs_dir+"predict_mtk/mtk_{species}.out",
                 err=logs_dir+"predict_mtk/mtk_{species}.error",
                 partition="normal",
                 threads="4",
-                time="25:00:00",
-                mem="80G"
+                time="30:00:00",
+                mem="120G"
         input:
                 species_fa=genomes_dir+"{species}.fa",
         output:
-                mtk_predict=preds_dir+"{species}/{species}_predsResults.gff",
-                mtk_predict2=preds_dir+"{species}/{species}_predsResults.codon.fas"
-        shell:
-                """
-                mkdir -p {preds_dir}{wildcards.species}/
-                {bin_dir}metaeuk easy-predict {input.species_fa} {db_dir}UniRef_insecta90_viruses90_bacteria50.fa {preds_dir}{wildcards.species}/{wildcards.species}_predsResults {preds_dir}{wildcards.species}/{wildcards.species}_tempFolder --min-length 33 --compressed 1 --split-memory-limit 65G
-                """
-
-
-rule mtk_taxtocontig : #taxonimic assignment to contig with metaeuk
-        params:
-                name="taxtocontig_{species}",
-                out=logs_dir+"mtk_taxtocontig/mtk_{species}_taxtocontig.out",
-                err=logs_dir+"mtk_taxtocontig/mtk_{species}_taxtocontig.error",
-                partition="normal",
-                threads="4",
-                time="2:00:00",
-                mem="120G"
-        input:
-                species_fa=preds_dir+"{species}/{species}_predsResults.gff"
-        output:
+                mtk_predict_gff=preds_dir+"{species}/{species}_predsResults.gff",
+                mtk_predict_codon=preds_dir+"{species}/{species}_predsResults.codon.fas",
                 mtk_taxo_contig=preds_dir+"{species}/{species}_taxResult_tax_per_contig.tsv",
                 mtk_taxo_pred=preds_dir+"{species}/{species}_taxResult_tax_per_pred.tsv"
         shell:
                 """
+                mkdir -p {preds_dir}{wildcards.species}/
+                {bin_dir}metaeuk easy-predict {input.species_fa} {db_dir}UniRef_insecta90_viruses90_bacteria50.fa {preds_dir}{wildcards.species}/{wildcards.species}_predsResults {preds_dir}{wildcards.species}/{wildcards.species}_tempFolder --min-length 33 --compressed 1 --split-memory-limit 65G
                 {bin_dir}metaeuk taxtocontig {preds_dir}{wildcards.species}/{wildcards.species}_tempFolder/[0-9]*/contigs {preds_dir}{wildcards.species}/{wildcards.species}_predsResults.fas {preds_dir}{wildcards.species}/{wildcards.species}_predsResults.headersMap.tsv {db_dir}UniRef_insecta90_viruses90_bacteria50_clean_DB/UniRef_insecta90_viruses90_bacteria50_clean_DB {preds_dir}{wildcards.species}/{wildcards.species}_taxResult {preds_dir}{wildcards.species}/{wildcards.species}_tempFolder --majority 0.5 --tax-lineage 1 --lca-mode 2
                 rm -r {preds_dir}{wildcards.species}/{wildcards.species}_tempFolder
                 """
 
 
-rule make_mtk_bed_fasta:
+rule make_mtk_bed_fasta: #Create the .bed file from metaeuk prediction and modify the header from the prediction file (.fa).
         params:
                 name="make_mtk_bed_fasta_{species}",
                 out=logs_dir+"make_mtk_bed_fasta/make_mtk_bed_fasta_{species}.out",
                 err=logs_dir+"make_mtk_bed_fasta/make_mtk_bed_fasta_{species}.error",
                 partition="normal",
                 threads="1",
-                time="0:05:00",
-                mem="10G"
+                time="0:30:00",
+                mem="20G"
         input:
                 codon_fasta=preds_dir+"{species}/{species}_predsResults.codon.fas",
                 order_file=list_dir+"species_horizon_order.txt"
@@ -112,18 +95,18 @@ rule make_mtk_bed_fasta:
                 awk -F'_species_|_order|_start|_end|_strand' '/^>/ {{
                         split($2, a, "_");
                         print a[1]"_"a[2]"_"a[3]"_"a[4] "\t" $4 "\t" $5 "\t" $0
-                }}' {input.codon_fasta} > {output.mtk_bed}
+                }}' {output.mtk_fasta} > {output.mtk_bed}
                 """
 
 
-rule make_TE_bed_fasta:
+rule make_TE_bed_fasta: #from the TE prediction, create the .bed file with the correct header and the .fa file.
         params:
                 name="make_TE_bed_fasta_{species}",
                 out=logs_dir+"make_TE_bed_fasta/make_TE_bed{species}.out",
                 err=logs_dir+"make_TE_bed_fasta/make_TE_bed{species}.error",
                 partition="normal",
                 threads="3",
-                time="0:20:00",
+                time="0:30:00",
                 mem="20G"
         input:
                 m8=horizon_TE+"{species}/result_mmseqs2.m8",
@@ -139,7 +122,7 @@ rule make_TE_bed_fasta:
                 """
 
 
-rule intersect:
+rule intersect: #Compares mtk and TE .bed files and detects duplicates prediction 
         params:
                 name="intersect_{species}",
                 out=logs_dir+"intersect/intersect_{species}.out",
@@ -192,5 +175,5 @@ rule choose_predict: #choisit les predictions les plus longues
                 {scripts_dir}choose_predict.py -i {input.overlap_mtk_TE} -o {preds_dir}{wildcards.species}/{wildcards.species}_selected_overlap.gff
                 cat {preds_dir}{wildcards.species}/{wildcards.species}_selected_overlap.gff {input.nooverlap_mtk_TE} {input.nooverlap_TE_mtk} | sort | uniq > {output.predict_bed}
                 
-                bedtools getfasta -fi {input.genome} -bed {output.predict_bed} -fo {output.predict_fasta} -nameOnly
+                bedtools getfasta -fi {input.genome} -bed {output.predict_bed} -fo {output.predict_fa} -nameOnly
                 """
