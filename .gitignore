@@ -2,3 +2,5 @@ Genes_prediciton
 Clustering
 list
 logs
+script/Genes_prediction/.snakemake/
+script/Genes_prediction/nohup_snakemake_metaeuk.out
