@@ -1,0 +1,83 @@
+####Dry RUN command :
+#nohup snakemake -j 10 -s snakemake_clustering -n --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_clustering.out &
+####Unlock command :
+#nohup snakemake -j 10 -s snakemake_clustering --unlock --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] "  &> nohup_snakemake_clustering.out &
+####Real command :
+#nohup snakemake -j 10 -s snakemake_clustering --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_clustering.out &
+
+import re
+import os
+
+#paths
+bin_dir="/beegfs/project/horizon/bin/miniconda3/bin/"   #bin du projet horizon où se trouvent les programmes
+scripts_dir="/beegfs/data/fblanchard/horizon/script/Clustering/"   #où se trouvent les scripts appelés
+logs_dir="/beegfs/data/fblanchard/horizon/logs/Clustering/"   #où vont les logs de chaque script
+#lists_dir="/beegfs/data/fblanchard/horizon/list/"   #où sont les listes
+#genomes_dir="/beegfs/data/fblanchard/horizon/genome/"   #où se trouvent les fasta des génomes des espèces
+preds_dir="/beegfs/data/fblanchard/horizon/Genes_prediction/"
+clusters_dir="/beegfs/data/fblanchard/horizon/Clustering/"   #où vont les résultats des étapes de clustering
+
+
+
+
+rule all:
+        input:
+                expand(clusters_dir+"all_species_predictions.fa"),   #rule database  
+                expand(clusters_dir+"clusters.tsv"),   #rule clustering
+
+
+rule predictions_database:   ###create mmseqs database for triplet sequences
+        params:
+                name="clustering_database",
+                out=logs_dir+"clustering_database.out",
+                err=logs_dir+"clustering_database.error",
+                partition="normal",
+                threads="8",
+                time="10:00:00",
+                mem="20G"
+        input:
+                species_list="/beegfs/data/fblanchard/horizon/list/species_horizon_list.txt"   
+        output:
+                predictions_fa=clusters_dir+"all_species_predictions.fa",
+                predictions_DB=clusters_dir+"clusters.tsv"   
+        shell:
+                """
+                rm -f {output.predictions_fa}
+                touch {output.predictions_fa}
+                
+                species_to_cat=$(awk '{{print $0}}' {input.species_list} )      #list 
+                for i in $species_to_cat
+                do
+
+                cat {preds_dir}$i\/$i\_preds_final.fa >> {output.predictions_fa}
+                
+                done
+                
+                mkdir -p {clusters_dir}all_species_predictions_DB/
+                {bin_dir}mmseqs createdb {output.predictions_fa} {output.predictions_DB}
+                """
+
+
+rule clustering:   ###make clusters of the homologs in triplet sequences
+        params:
+                name="clustering",
+                out=logs_dir+"clustering.out",
+                err=logs_dir+"clustering.error",
+                partition="normal",
+                threads="24",
+                time="60:00:00",
+                mem="80G"
+        input:
+                predictions_DB=clusters_dir+"all_species_predictions_DB/all_species_predictions_DB"   
+        output:
+                cluster_tsv=clusters_dir+"clusters.tsv"             #tsv file of cluster names and members
+        shell:
+                """
+                mkdir -p {clusters_dir}/clusters/
+                {bin_dir}mmseqs cluster {input.predictions_DB} {clusters_dir}clusters --min-seq-id 0.90 --cluster-mode 2 --cov-mode 1 {clusters_dir}tmpclu
+
+                {bin_dir}mmseqs createtsv {input.predictions_DB} {input.predictions_DB} {clusters_dir}clusters {output.cluster_tsv}
+
+                rm -r {clusters_dir}tmpclu
+                """
+

@@ -78,7 +78,7 @@ rule make_mtk_bed_fasta: #Create the .bed file from metaeuk prediction and modif
                 out=logs_dir+"make_mtk_bed_fasta/make_mtk_bed_fasta_{species}.out",
                 err=logs_dir+"make_mtk_bed_fasta/make_mtk_bed_fasta_{species}.error",
                 partition="normal",
-                threads="1",
+                threads="2",
                 time="0:30:00",
                 mem="20G"
         input:
@@ -105,7 +105,7 @@ rule make_TE_bed_fasta: #from the TE prediction, create the .bed file with the c
                 out=logs_dir+"make_TE_bed_fasta/make_TE_bed{species}.out",
                 err=logs_dir+"make_TE_bed_fasta/make_TE_bed{species}.error",
                 partition="normal",
-                threads="3",
+                threads="2",
                 time="0:30:00",
                 mem="20G"
         input:
@@ -177,3 +177,5 @@ rule choose_predict: #choisit les predictions les plus longues
                 
                 bedtools getfasta -fi {input.genome} -bed {output.predict_bed} -fo {output.predict_fa} -nameOnly
                 """
+
+                
