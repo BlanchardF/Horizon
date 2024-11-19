@@ -23,7 +23,7 @@ clusters_dir="/beegfs/data/fblanchard/horizon/Clustering/"   #où vont les résu
 rule all:
         input:
                 expand(clusters_dir+"all_species_predictions.fa"),   #rule database  
-                expand(clusters_dir+"clusters.tsv"),   #rule clustering
+                expand(clusters_dir+"clusters/clusters.tsv"),   #rule clustering
 
 
 rule predictions_database:   ###create mmseqs database for triplet sequences
@@ -33,13 +33,13 @@ rule predictions_database:   ###create mmseqs database for triplet sequences
                 err=logs_dir+"clustering_database.error",
                 partition="normal",
                 threads="8",
-                time="10:00:00",
-                mem="20G"
+                time="20:00:00",
+                mem="60G"
         input:
-                species_list="/beegfs/data/fblanchard/horizon/list/species_horizon_list.txt"   
+                species_list="/beegfs/data/fblanchard/horizon/list/list_50.txt"   
         output:
                 predictions_fa=clusters_dir+"all_species_predictions.fa",
-                predictions_DB=clusters_dir+"clusters.tsv"   
+                predictions_DB=clusters_dir+"all_species_predictions_DB/all_species_predictions_DB"   
         shell:
                 """
                 rm -f {output.predictions_fa}
@@ -63,21 +63,23 @@ rule clustering:   ###make clusters of the homologs in triplet sequences
                 name="clustering",
                 out=logs_dir+"clustering.out",
                 err=logs_dir+"clustering.error",
-                partition="normal",
-                threads="24",
-                time="60:00:00",
-                mem="80G"
+                partition="bigmem",
+                threads="64",
+                time="5:00:00",
+                mem="200G"
         input:
-                predictions_DB=clusters_dir+"all_species_predictions_DB/all_species_predictions_DB"   
+                predictions_DB=clusters_dir+"all_species_predictions_DB/all_species_predictions_DB"
         output:
-                cluster_tsv=clusters_dir+"clusters.tsv"             #tsv file of cluster names and members
+                cluster_tsv=clusters_dir+"clusters/clusters.tsv"             #tsv file of cluster names and members
         shell:
                 """
+                rm -r -f {clusters_dir}/clusters/
                 mkdir -p {clusters_dir}/clusters/
-                {bin_dir}mmseqs cluster {input.predictions_DB} {clusters_dir}clusters --min-seq-id 0.90 --cluster-mode 2 --cov-mode 1 {clusters_dir}tmpclu
+                {bin_dir}mmseqs cluster {input.predictions_DB} {clusters_dir}clusters/clusters --min-seq-id 0.90 --cluster-mode 2 --cov-mode 1 {clusters_dir}tmpclu
 
-                {bin_dir}mmseqs createtsv {input.predictions_DB} {input.predictions_DB} {clusters_dir}clusters {output.cluster_tsv}
+                {bin_dir}mmseqs createtsv {input.predictions_DB} {input.predictions_DB} {clusters_dir}clusters/clusters {output.cluster_tsv}
 
                 rm -r {clusters_dir}tmpclu
                 """
+
 
