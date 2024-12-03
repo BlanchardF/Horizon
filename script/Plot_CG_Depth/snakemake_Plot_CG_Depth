@@ -3,7 +3,7 @@
 ####Unlock command :
 #nohup snakemake -j 50 -s snakemake_Plot_CG_Depth --unlock --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] "  &> nohup_snakemake_Plot_CG_Depth &
 ####Real command :
-#nohup snakemake -j 150 -s snakemake_Plot_CG_Depth --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_Plot_CG_Depth &
+#nohup snakemake -j 50 -s snakemake_Plot_CG_Depth --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_Plot_CG_Depth &
 
 import re
 import os
@@ -15,12 +15,14 @@ logs_dir="/beegfs/data/fblanchard/horizon/logs/Plot_CG_Depth/"   #où vont les l
 #lists_dir="/beegfs/data/fblanchard/horizon/list/"   #où sont les listes
 genomes_dir="/beegfs/data/fblanchard/horizon/genome/"   #où se trouvent les fasta des génomes des espèces
 output_dir="/beegfs/data/fblanchard/horizon/Plot_CG_Depth/"  
-Ss_ref_dir= "/beegfs/project/horizon/data/assembly/Species_specimens_reference_genome.txt" #list du specimen de reférence pour chaque espece 
-preds_dir= "/beegfs/data/fblanchard/horizon/Genes_prediction/"  
+Ss_ref_dir="/beegfs/project/horizon/data/assembly/Species_specimens_reference_genome.txt" #list du specimen de reférence pour chaque espece 
+preds_dir="/beegfs/data/fblanchard/horizon/Genes_prediction/"  
+Ss2_ref_dir="/beegfs/project/horizon/data/assembly/Species_specimen2.txt" #list du specimen 2 pour chaque espece 
+TE_dir="/beegfs/project/horizon/data/TE/"
 
 #species_list
 species_file = open('/beegfs/data/fblanchard/horizon/list/species_horizon_list.txt', 'r') #write the list
-#species_file = open('/beegfs/data/fblanchard/horizon/list/list_3.txt', 'r') #write the list
+#species_file = open('/beegfs/data/fblanchard/horizon/list/xiphosomella_wirra.txt', 'r') #write the list
 # read the content and split when newline 
 list_species = species_file.read().split('\n') 
 list_species = list_species[:-1] 
@@ -45,12 +47,20 @@ rule all:
                 #rule calculate_median
                 expand(output_dir+"{species}/{species}_median_depth.tsv", species = list_species),
 
+                #rule calculate_median_indiv2
+                expand(output_dir+"{species}/{species}_median_depth_2.tsv", species = list_species),
+
                 #rule clean_taxo
                 expand(output_dir+"{species}/{species}_clean_taxo.tsv", species = list_species),
 
                 #rule Plot_CG_depth
                 expand(output_dir+"{species}/{species}_CG_plot.svg", species = list_species),
-                expand(output_dir+"{species}/{species}_CG_plot.jpg", species = list_species)
+                expand(output_dir+"{species}/{species}_CG_plot.jpg", species = list_species),
+                expand(output_dir+"{species}/{species}_Full_tab.tsv", species = list_species),
+
+                #rule Krona
+                expand(output_dir+"{species}/{species}_Krona.html", species = list_species),
+                expand(output_dir+"{species}/{species}_Taxo_resume.tsv", species = list_species)
 
 
 
@@ -136,6 +146,47 @@ rule calculate_median:
                 }}' OFS='\\t' > {output}
                 """
 
+rule calculate_median_indiv2:
+        params:
+                name="calcul_median_depth_2_{species}",
+                out=logs_dir + "median_depth/median_{species}_2.out",
+                err=logs_dir + "median_depth/median_{species}_2.error",
+                partition=lambda wildcards: "bigmem" if genome_sizes.get(wildcards.species, 0) > 600 else "normal",
+                threads=8,
+                time=lambda wildcards: "4:00:00" if genome_sizes.get(wildcards.species, 0) > 600 else "2:00:00",
+                mem=lambda wildcards: "160G" if genome_sizes.get(wildcards.species, 0) > 600 else "80G"
+            
+        input:
+                input=Ss2_ref_dir
+        
+        output:
+                output=output_dir+"{species}/{species}_median_depth_2.tsv"
+                
+        shell:
+                """
+                indiv=$(awk -v spc={wildcards.species} '$1==spc {{print $2}}' {input})
+        
+                
+                zcat /beegfs/project/horizon/data/mapping/bed/{wildcards.species}:$indiv\.per-base.bed.gz | awk -F'\\t' '{{
+                        split($1, scaffold_size, "|");
+                        scaffold = scaffold_size[1];
+                        size = scaffold_size[2];
+                        data[scaffold "|" size][count[scaffold "|" size]++] = $3;
+                }} 
+                END {{
+                        for (s in data) {{
+                                n = count[s];
+                                asort(data[s]);
+                                if (n % 2 == 0) {{
+                                        median = (data[s][n/2] + data[s][n/2 + 1]) / 2;
+                                }} else {{
+                                        median = data[s][(n+1)/2];
+                                }}
+                                print s, median;
+                        }}
+                }}' OFS='\\t' > {output}
+                """
+
 
 
 rule Plot_CG_depth:   
@@ -145,30 +196,56 @@ rule Plot_CG_depth:
                 err=logs_dir+"Plot/Plot_CG_depth_{species}.error",
                 partition="normal",
                 threads="8",
-                time="0:10:00",
-                mem="10G"
+                time=lambda wildcards: "0:30:00" if genome_sizes.get(wildcards.species, 0) > 600 else "0:10:00",
+                mem=lambda wildcards: "30G" if genome_sizes.get(wildcards.species, 0) > 600 else "10G"
         input:
-                input=Ss_ref_dir,
+                input_Ss=Ss_ref_dir,
+                input_Ss2=Ss2_ref_dir,
                 clean_taxo=output_dir+"{species}/{species}_clean_taxo.tsv",
                 CG=output_dir+"{species}/{species}_taux_CG.tsv",
-                depth=output_dir+"{species}/{species}_median_depth.tsv"
+                depth=output_dir+"{species}/{species}_median_depth.tsv",
+                depth_2=output_dir+"{species}/{species}_median_depth_2.tsv",
+                TE=TE_dir+"{species}/result_mmseqs2.m8"
         output:
                 Plot=output_dir+"{species}/{species}_CG_plot.svg",
                 Plot_jpg=output_dir+"{species}/{species}_CG_plot.jpg",
                 Full_tab=output_dir+"{species}/{species}_Full_tab.tsv"
         shell:
                 """
-                indiv=$(awk -v spc={wildcards.species} '$1==spc {{print $2}}' {input})
-    
+                indiv=$(awk -v spc={wildcards.species} '$1==spc {{print $2}}' {input.input_Ss})  
+                indiv2=$(awk -v spc={wildcards.species} '$1==spc {{print $2}}' {input.input_Ss2})
+                
+
                 /beegfs/data/soft/R-4.3.1/bin/Rscript {scripts_dir}Plot.R \
                 --input_taxResult {input.clean_taxo} \
                 --input_cov /beegfs/project/horizon/data/mapping/cov/{wildcards.species}\:${{indiv}}.cov \
+                --input_cov_2 /beegfs/project/horizon/data/mapping/cov/{wildcards.species}\:${{indiv2}}.cov \
                 --input_CG {input.CG} \
                 --input_Busco /beegfs/project/horizon/data/stats/busco/specimens/${{indiv}}/run_insecta_odb10/full_table.tsv \
                 --input_depth {input.depth} \
+                --input_depth_2 {input.depth_2} \
+                --input_TE {input.TE} \
                 --output_Plot {output.Plot} \
                 --output_Plot_jpg {output.Plot_jpg} \
                 --output_full_tab {output.Full_tab}
                 """
 
-               
+rule Krona:   
+        params:
+                name="Krona_{species}",
+                out=logs_dir+"Krona/Krona_{species}.out",
+                err=logs_dir+"Krona/Krona_{species}.error",
+                partition="normal",
+                threads="16",
+                time="3:00:00",
+                mem="30G"
+        input:
+                Full_tab=output_dir+"{species}/{species}_Full_tab.tsv"
+        output:
+                Krona=output_dir+"{species}/{species}_Krona.html",
+                Taxo_resume=output_dir+"{species}/{species}_Taxo_resume.tsv"
+        shell:
+                """
+                {scripts_dir}Krona.sh {input.Full_tab} {output.Krona} {output.Taxo_resume}
+
+                """
