@@ -1,9 +1,13 @@
 ####Dry RUN command :
-#nohup snakemake -j 150 -s snakemake_Plot_CG_Depth -n --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_Plot_CG_Depth &
+#nohup snakemake -j 150 -s snakemake_Plot_CG_Depth --rerun-incomplete -n --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_Plot_CG_Depth &
 ####Unlock command :
 #nohup snakemake -j 50 -s snakemake_Plot_CG_Depth --unlock --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] "  &> nohup_snakemake_Plot_CG_Depth &
 ####Real command :
 #nohup snakemake -j 50 -s snakemake_Plot_CG_Depth --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_Plot_CG_Depth &
+
+####marqué les fichier comme completer en cas de changement de params :
+#snakemake -j 150 -s snakemake_Plot_CG_Depth --touch
+
 
 import re
 import os
@@ -19,10 +23,11 @@ Ss_ref_dir="/beegfs/project/horizon/data/assembly/Species_specimens_reference_ge
 preds_dir="/beegfs/data/fblanchard/horizon/Genes_prediction/"  
 Ss2_ref_dir="/beegfs/project/horizon/data/assembly/Species_specimen2.txt" #list du specimen 2 pour chaque espece 
 TE_dir="/beegfs/project/horizon/data/TE/"
+db="/beegfs/data/fblanchard/horizon/db/"
 
 #species_list
-species_file = open('/beegfs/data/fblanchard/horizon/list/species_horizon_list.txt', 'r') #write the list
-#species_file = open('/beegfs/data/fblanchard/horizon/list/xiphosomella_wirra.txt', 'r') #write the list
+#species_file = open('/beegfs/data/fblanchard/horizon/list/species_horizon_list.txt', 'r') #write the list
+species_file = open('/beegfs/data/fblanchard/horizon/list/xiphosomella_wirra.txt', 'r') #write the list
 # read the content and split when newline 
 list_species = species_file.read().split('\n') 
 list_species = list_species[:-1] 
@@ -60,8 +65,13 @@ rule all:
 
                 #rule Krona
                 expand(output_dir+"{species}/{species}_Krona.html", species = list_species),
-                expand(output_dir+"{species}/{species}_Taxo_resume.tsv", species = list_species)
+                expand(output_dir+"{species}/{species}_Taxo_resume.tsv", species = list_species),
 
+                #rule Tab_cds
+                expand(output_dir+"{species}/{species}_Tab_cds.tsv",species = list_species),
+
+                #rule GO_finder
+                expand(output_dir+"{species}/{species}_Tab_cds_GO.tsv",species = list_species)
 
 
 rule calcul_taux_CG:   
@@ -236,9 +246,9 @@ rule Krona:
                 out=logs_dir+"Krona/Krona_{species}.out",
                 err=logs_dir+"Krona/Krona_{species}.error",
                 partition="normal",
-                threads="16",
-                time="3:00:00",
-                mem="30G"
+                threads="4",
+                time="0:10:00",
+                mem="8G"
         input:
                 Full_tab=output_dir+"{species}/{species}_Full_tab.tsv"
         output:
@@ -246,6 +256,50 @@ rule Krona:
                 Taxo_resume=output_dir+"{species}/{species}_Taxo_resume.tsv"
         shell:
                 """
-                {scripts_dir}Krona.sh {input.Full_tab} {output.Krona} {output.Taxo_resume}
+                {scripts_dir}Krona.py {input.Full_tab} {output.Krona} {output.Taxo_resume}
 
+                """
+
+
+rule Tab_cds:   
+        params:
+                name="Tab_cds_{species}",
+                out=logs_dir+"Tab_cds/Tab_cds_{species}.out",
+                err=logs_dir+"Tab_cds/Tab_cds_{species}.error",
+                partition="normal",
+                threads="8",
+                time="2:00:00",
+                mem="16G"
+        input:
+                cds_preds=preds_dir+"{species}/{species}_taxResult_tax_per_pred.tsv"
+        output:
+                Tab_cds=output_dir+"{species}/{species}_Tab_cds.tsv",
+                Tab_temp=output_dir+"{species}/{species}_Tab_temp.tsv"
+        shell:
+                """
+                /beegfs/home/fblanchard/miniconda3/bin/python3.12 taxo_clean.py -i {input.cds_preds} -o {output.Tab_temp} 
+                /beegfs/data/soft/R-4.3.1/bin/Rscript {scripts_dir}Tab_cds.R \
+                --input_Temp {output.Tab_temp}  \
+                --output_cds {output.Tab_cds} \
+                """
+
+rule GO_finder:   
+        params:
+                name="GO_finder_{species}",
+                out=logs_dir+"GO_finder/GO_finder_{species}.out",
+                err=logs_dir+"GO_finder/GO_finder_{species}.error",
+                partition="normal",
+                threads="8",
+                time="2:00:00",
+                mem="16G"
+        input:
+                Tab_cds=output_dir+"{species}/{species}_Tab_cds.tsv",
+                idmapping=db+"idmapping_selected.tab"
+
+        output:
+                Tab_cds_GO=output_dir+"{species}/{species}_Tab_cds_GO.tsv",
+                
+        shell:
+                """
+                {scripts_dir}GO_finder.py {input.Tab_cds} {input.idmapping} {output.Tab_cds_GO}
                 """

@@ -1,0 +1,133 @@
+####Dry RUN command :
+#nohup snakemake -j 150 -s snakemake_summary -n --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_summary &
+####Unlock command :
+#nohup snakemake -j 50 -s snakemake_summary  --unlock --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] "  &> nohup_snakemake_summary &
+####Real command :
+#nohup snakemake -j 50 -s snakemake_summary  --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_summary &
+
+import math
+import glob
+
+# Paths
+bin_dir = "/beegfs/project/horizon/bin/miniconda3/bin/"
+scripts_dir = "/beegfs/data/fblanchard/horizon/script/Plot_CG_Depth/"
+logs_dir = "/beegfs/data/fblanchard/horizon/logs/Plot_CG_Depth/summary/"
+genomes_dir = "/beegfs/data/fblanchard/horizon/genome/"
+output_dir = "/beegfs/data/fblanchard/horizon/Plot_CG_Depth/summary/"
+Ss_ref_dir = "/beegfs/project/horizon/data/assembly/Species_specimens_reference_genome.txt"
+
+
+rule all:
+    input:
+        # Rule grille
+        output_dir + "grille_done.flag",
+
+        # Rule Krona 
+        output_dir + "Krona_summary.html",
+
+        # Rule Full_tab
+        output_dir + "All_species_Full_tab.tsv",
+
+        #Rule taxo_summary 
+        #output_dir + "taxo_summary.tsv"
+
+rule grille:
+    params:
+        name="grille",
+        out=logs_dir + "grille.out",
+        err=logs_dir + "grille.error",
+        partition="normal",
+        threads="8",
+        time="3:00:00",
+        mem="10G"
+    input:
+        jpg="/beegfs/data/fblanchard/horizon/Plot_CG_Depth/zygjanzen01_janzen23/zygjanzen01_janzen23_CG_plot.jpg"
+    output:
+        flag=output_dir+"grille_done.flag"
+    shell:
+        """
+        mkdir -p {output_dir}
+        bash {scripts_dir}grille_plot.sh
+        touch {output.flag}
+        """
+
+rule Krona:
+    params:
+        name="krona",
+        out=logs_dir + "krona.out",
+        err=logs_dir + "krona.error",
+        partition="normal",
+        threads="4",
+        time="0:10:00",
+        mem="16G"
+    input:
+        krona="/beegfs/data/fblanchard/horizon/Plot_CG_Depth/zygjanzen01_janzen23/zygjanzen01_janzen23_Taxo_resume_with_sum.tsv"
+    output:
+        summary=output_dir+"Krona_summary.html"
+    shell:
+        """
+        find /beegfs/data/fblanchard/horizon/Plot_CG_Depth/*/* -wholename '*_Taxo_resume_with_sum.tsv' | xargs ktImportText -o {output.summary}
+        """
+
+
+rule Full_tab:
+    params:
+        name="Full_tab",
+        out=logs_dir + "Full_tab.out",
+        err=logs_dir + "Full_tab.error",
+        partition="normal",
+        threads="4",
+        time="0:10:00",
+        mem="8G"
+    input:
+        input="/beegfs/data/fblanchard/horizon/Plot_CG_Depth/zygjanzen01_janzen23/zygjanzen01_janzen23_Full_tab.tsv"
+    output:
+        Full_tab=output_dir+"All_species_Full_tab.tsv"
+    shell:
+        """
+        if [ -e {output.Full_tab} ]; then
+            rm {output.Full_tab}
+        fi
+
+        cat /beegfs/data/fblanchard/horizon/Plot_CG_Depth/*/*_Full_tab.tsv > {output.Full_tab}
+
+        python3 /beegfs/data/fblanchard/horizon/script/Plot_CG_Depth/All_species_Taxo_resume.py
+        """
+
+
+
+rule Taxo_summary:
+    params:
+        name="taxo_summary",
+        out=logs_dir + "taxo_summary.out",
+        err=logs_dir + "taxo_summary.error",
+        partition="normal",
+        threads="4",
+        time="0:10:00",
+        mem="8G"
+    input:
+        krona="/beegfs/data/fblanchard/horizon/Plot_CG_Depth/zygjanzen01_janzen23/zygjanzen01_janzen23_Taxo_resume_with_sum.tsv"
+    output:
+        output_dir + "taxo_summary.tsv"
+    shell:
+        """
+        {scripts_dir}Taxo_summary.py
+        """
+
+rule Plot_summary:
+    params:
+        name="plot_summary",
+        out=logs_dir + "plot_summary.out",
+        err=logs_dir + "plot_summary.error",
+        partition="normal",
+        threads="4",
+        time="2:00:00",
+        mem="10G"
+    input:
+        "/beegfs/data/fblanchard/horizon/Plot_CG_Depth/summary/grille_done.flag"
+    output:
+        "/beegfs/data/fblanchard/horizon/Plot_CG_Depth/summary/plot_summary_done.flag"
+    shell:
+        """
+        # Add Plot_summary shell commands here
+        """

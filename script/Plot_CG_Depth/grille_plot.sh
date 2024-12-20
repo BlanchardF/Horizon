@@ -1,15 +1,8 @@
 #!/bin/bash 
-#SBATCH --partition=normal 
-#SBATCH --time=2:00:00 
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=32G 
-#SBATCH --output=/beegfs/data/fblanchard/horizon/Plot_CG_Depth/grilles/std_output.txt 
-#SBATCH --error=/beegfs/data/fblanchard/horizon/Plot_CG_Depth/grilles/std_error.txt 
-
 
 # Définir les chemins
 base_dir="/beegfs/data/fblanchard/horizon/Plot_CG_Depth/*/"
-output_dir="/beegfs/data/fblanchard/horizon/Plot_CG_Depth/grilles"
+output_dir="/beegfs/data/fblanchard/horizon/Plot_CG_Depth/summary"
 mkdir -p "$output_dir"  # Créer le répertoire de sortie
 
 # Rechercher toutes les images dans les sous-dossiers
