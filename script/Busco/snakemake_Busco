@@ -1,0 +1,91 @@
+####Dry RUN command :
+#nohup snakemake -j 150 -s snakemake_Busco --rerun-incomplete -n --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_Busco &
+####Unlock command :
+#nohup snakemake -j 50 -s snakemake_Busco --unlock --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] "  &> nohup_snakemake_Busco &
+####Real command :
+#nohup snakemake -j 250 -s snakemake_Busco --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_Busco &
+
+####marqué les fichier comme completer en cas de changement de params :
+#snakemake -j 150 -s snakemake_Plot_CG_Depth --touch
+
+#paths
+bin_dir="/beegfs/project/horizon/bin/miniconda3/bin/"   #bin du projet horizon où se trouvent les programmes
+scripts_dir="/beegfs/data/fblanchard/horizon/script/Plot_CG_Depth/"   #où se trouvent les scripts appelés
+logs_dir="/beegfs/data/fblanchard/horizon/logs/"   #où vont les logs de chaque script
+#lists_dir="/beegfs/data/fblanchard/horizon/list/"   #où sont les listes
+output_dir="/beegfs/data/fblanchard/horizon/Busco/"  
+Ss_ref_dir="/beegfs/project/horizon/data/assembly/Species_specimens_reference_genome.txt" #list du specimen de reférence pour chaque espece 
+preds_dir="/beegfs/data/fblanchard/horizon/Genes_prediction/"  
+
+
+#species_list
+species_file = open('/beegfs/data/fblanchard/horizon/list/species_horizon_list.txt', 'r') #write the list
+#species_file = open('/beegfs/data/fblanchard/horizon/list/xiphosomella_wirra.txt', 'r') #write the list
+# read the content and split when newline 
+list_species = species_file.read().split('\n') 
+list_species = list_species[:-1] 
+   
+
+
+# Définir le chemin du fichier contenant l'ordre taxonomique
+order_file = "/beegfs/data/fblanchard/horizon/list/species_horizon_order.txt"
+
+# Lire le fichier et créer un dictionnaire {species: order}
+species_to_order = {}
+with open(order_file, "r") as f:
+    for line in f:
+        species, order = line.strip().split()
+        species_to_order[species] = order
+
+# Associer l'ordre à la base de données BUSCO
+order_to_busco = {
+    "Lepidoptera": "lepidoptera_odb10",
+    "Diptera": "diptera_odb10",
+    "Hymenoptera": "hymenoptera_odb10"}
+
+# Fonction pour récupérer la base de données BUSCO appropriée
+def get_busco_db(wildcards):
+    species = wildcards.species
+    order = species_to_order.get(species, "arthropoda")  # Par défaut : arthropoda
+    return order_to_busco.get(order, "arthropoda_odb10")  # Par défaut : arthropoda_odb10
+
+rule all:
+    input:
+        expand(output_dir+"{species}/{species}_Busco/Busco/logs/busco.log", species=list_species)
+
+
+
+
+rule Busco:
+    params:
+        name="Busco_{species}",
+        out=logs_dir+"Busco/Busco_{species}.out",
+        err=logs_dir+"Busco/Busco_{species}.error",
+        partition="normal",
+        threads="8",
+        time="24:00:00",
+        mem="40G",
+        busco_db=lambda wildcards: get_busco_db(wildcards)  # Détermine la base de données
+    input:
+        preds=preds_dir+"{species}/{species}_preds_final.fa"
+    output:
+        summary=output_dir+"{species}/{species}_Busco/Busco/logs/busco.log"
+    shell:
+        """
+
+        mkdir -p {output_dir}{wildcards.species}/
+        
+        sed 's|/|-slash-|g' {input.preds} > {output_dir}{wildcards.species}/Clean_preds.fa
+
+        /beegfs/data/soft/singularity3.11.0/bin/singularity exec --bind /beegfs/:/beegfs/ /beegfs/project/horizon/bin/BUSCO/busco_v5.5.0_cv1.sif busco \
+        -f \
+        -i /beegfs/data/fblanchard/horizon/Busco/{wildcards.species}/Clean_preds.fa \
+        -l {params.busco_db} \
+        --out Busco \
+        --out_path /beegfs/data/fblanchard/horizon/Busco/{wildcards.species}/{wildcards.species}_Busco/ \
+        -m transcriptome\
+        -c 3 \
+        #--offline \
+        --download_path /beegfs/project/horizon/data/stats/busco/species_reconciled/busco_downloads/
+        """
+
