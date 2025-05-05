@@ -175,6 +175,9 @@ rule choose_predict: #choisit les predictions les plus longues
                 {scripts_dir}choose_predict.py -i {input.overlap_mtk_TE} -o {preds_dir}{wildcards.species}/{wildcards.species}_selected_overlap.gff
                 cat {preds_dir}{wildcards.species}/{wildcards.species}_selected_overlap.gff {input.nooverlap_mtk_TE} {input.nooverlap_TE_mtk} | sort | uniq > {output.predict_bed}
                 
+                sed -i 's/>//g' {output.predict_bed}
+                sed -i 's/#/:/g' {output.predict_bed}
+
                 bedtools getfasta -fi {input.genome} -bed {output.predict_bed} -fo {output.predict_fa} -nameOnly
                 """
 

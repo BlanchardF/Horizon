@@ -2,8 +2,13 @@
 
 import pandas as pd
 import argparse
+import os
 
 def add_go_column(input_tsv1, input_tsv2, output_tsv):
+    # Vérifiez l'existence des fichiers d'entrée
+    if not os.path.exists(input_tsv1) or not os.path.exists(input_tsv2):
+        raise FileNotFoundError("Un ou plusieurs fichiers d'entrée sont introuvables.")
+    
     # Charger les tableaux
     table1 = pd.read_csv(input_tsv1, sep='\t')
     table2 = pd.read_csv(
@@ -20,6 +25,7 @@ def add_go_column(input_tsv1, input_tsv2, output_tsv):
     
     # Sauvegarder le tableau fusionné
     merged_table.to_csv(output_tsv, sep='\t', index=False)
+    print(f"Tableau fusionné sauvegardé avec succès dans {output_tsv}.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ajoute une colonne 'GO' au premier tableau à partir du deuxième tableau basé sur des correspondances.")
@@ -29,7 +35,5 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
+    # Appeler la fonction principale
     add_go_column(args.input_tsv1, args.input_tsv2, args.output_tsv)
-
-
-#./GO_finder.py /beegfs/data/fblanchard/horizon/Plot_CG_Depth/xiphosomella_wirra/xiphosomella_wirra_Tab_cds.tsv /beegfs/data/fblanchard/horizon/db/idmapping_selected.tab test.tsv

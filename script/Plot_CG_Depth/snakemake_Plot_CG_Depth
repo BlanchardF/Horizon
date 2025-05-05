@@ -3,7 +3,7 @@
 ####Unlock command :
 #nohup snakemake -j 50 -s snakemake_Plot_CG_Depth --unlock --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] "  &> nohup_snakemake_Plot_CG_Depth &
 ####Real command :
-#nohup snakemake -j 50 -s snakemake_Plot_CG_Depth --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_Plot_CG_Depth &
+#nohup snakemake -j 10 -s snakemake_Plot_CG_Depth --cluster "sbatch -J {params.name} -p {params.partition} -t {params.time} --mem {params.mem} --cpus-per-task {params.threads} -o {params.out} -e {params.err} --exclude=pbil-deb[14-27] " &> nohup_snakemake_Plot_CG_Depth &
 
 ####marqué les fichier comme completer en cas de changement de params :
 #snakemake -j 150 -s snakemake_Plot_CG_Depth --touch
@@ -26,8 +26,8 @@ TE_dir="/beegfs/project/horizon/data/TE/"
 db="/beegfs/data/fblanchard/horizon/db/"
 
 #species_list
-#species_file = open('/beegfs/data/fblanchard/horizon/list/species_horizon_list.txt', 'r') #write the list
-species_file = open('/beegfs/data/fblanchard/horizon/list/xiphosomella_wirra.txt', 'r') #write the list
+species_file = open('/beegfs/data/fblanchard/horizon/list/species_horizon_list.txt', 'r') #write the list
+#species_file = open('/beegfs/data/fblanchard/horizon/list/xiphosomella_wirra.txt', 'r') #write the list
 # read the content and split when newline 
 list_species = species_file.read().split('\n') 
 list_species = list_species[:-1] 
@@ -291,7 +291,7 @@ rule GO_finder:
                 partition="normal",
                 threads="8",
                 time="2:00:00",
-                mem="16G"
+                mem="32G"
         input:
                 Tab_cds=output_dir+"{species}/{species}_Tab_cds.tsv",
                 idmapping=db+"idmapping_selected.tab"

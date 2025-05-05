@@ -5,4 +5,14 @@ logs
 script/Genes_prediction/.snakemake/
 script/Genes_prediction/nohup_snakemake_metaeuk.out
 genome
-
+script/Busco/*.log
+script/Busco/busco_downloads/*
+script/Plot_CG_Depth/taxdump.tar.gz
+script/Plot_CG_Depth/nohup_snakemake_Plot_CG_Depth
+script/Plot_CG_Depth/nohup_snakemake_summary
+Busco/
+Plot_CG_Depth/
+db/
+script/Busco/.snakemake/
+script/Busco/nohup_snakemake_Busco
+script/Plot_CG_Depth/.snakemake/
