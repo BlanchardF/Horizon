@@ -29,6 +29,7 @@ cd Horizon
 
 Le projet est structuré en plusieurs répertoires thématiques correspondant aux grandes étapes de l'analyse :
 
+```bash
 Horizon/
 ├── Busco/ # Résultats de l'évaluation de complétude des génomes (BUSCO)
 ├── Clustering/ # Résultats et scripts liés au regroupement des gènes
@@ -44,6 +45,7 @@ Horizon/
 │ ├── Genes_prediction/ # Scripts de prédiction de gènes
 │ └── Plot_CG_Depth/ # Visualisations de l'annotation 
 ├── README.md # Documentation du projet
+```
 
 ---
 
