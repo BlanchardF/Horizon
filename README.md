@@ -22,7 +22,7 @@ Cloner ce dépôt :
 ```bash
 git clone git@github.com:BlanchardF/Horizon.git
 cd Horizon
-
+```
 ---
 
 ## 📁 Organisation du dépôt
