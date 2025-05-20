@@ -16,3 +16,10 @@ db/
 script/Busco/.snakemake/
 script/Busco/nohup_snakemake_Busco
 script/Plot_CG_Depth/.snakemake/
+Depot_data/Species_specimen_Tachinidae.txt
+Depot_data/coverage_by_sample.tsv
+Depot_data/data/
+Depot_data/irods_repertory.txt
+Depot_data/manifests/
+Depot_data/webin-cli-8.2.0.jar
+
